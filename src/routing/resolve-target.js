@@ -19,18 +19,9 @@
 import { SORTED_PLATFORMS } from './platform-index.js';
 import { transformPath } from './platform-transformers.js';
 import { normalizeRegistryApiPath } from '../protocols/docker.js';
+import { createHomePageResponse } from '../response/home-page.js';
 import { isFlatpakReferenceFilePath } from '../utils/rewrite.js';
 import { createErrorResponse } from '../utils/security.js';
-
-export const HOME_PAGE_URL = 'https://github.com/xixu-me/Xget';
-
-/**
- * Creates the canonical homepage redirect response.
- * @returns {Response} Redirect response to the Xget homepage.
- */
-export function createHomepageRedirect() {
-  return Response.redirect(HOME_PAGE_URL, 302);
-}
 
 /**
  * Normalizes request paths before platform routing.
@@ -85,12 +76,25 @@ export function resolveTarget(url, effectivePath, platforms) {
     }) || effectivePath.split('/')[1];
 
   if (!platform || !platforms[platform]) {
-    return { response: createHomepageRedirect() };
+    // Multi-part prefixes such as `/ip/openai` only match when they carry a
+    // trailing slash, so report them as incomplete instead of unknown.
+    const barePrefixKey = effectivePath.replace(/^\/+|\/+$/g, '').replace(/\//g, '-');
+    const notice =
+      platforms[barePrefixKey] === undefined
+        ? '未识别该平台前缀，已回到转换器主页。'
+        : `请在该前缀后补全资源路径，例如 /${barePrefixKey.replace(/-/g, '/')}/owner/repo。`;
+
+    return { response: createHomePageResponse({ notice, origin: url.origin }) };
   }
 
   const platformPath = `/${platform.replace(/-/g, '/')}`;
   if (effectivePath === platformPath || effectivePath === `${platformPath}/`) {
-    return { response: createHomepageRedirect() };
+    return {
+      response: createHomePageResponse({
+        notice: `请在该前缀后补全资源路径，例如 ${platformPath}/owner/repo。`,
+        origin: url.origin
+      })
+    };
   }
 
   const transformedPath = transformPath(effectivePath, platform);
