@@ -557,7 +557,9 @@ describe('Worker regression coverage', () => {
   });
 
   it('returns a ranged response after caching the full upstream body', async () => {
+    // 1: ranged cache key, 2: full content key, 3: edge cache hint, 4: post-store lookup
     cacheDefault.match
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(
@@ -612,6 +614,7 @@ describe('Worker regression coverage', () => {
   it('warns when post-store cache lookups fail for range requests', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     cacheDefault.match
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockRejectedValueOnce(new Error('range-cache-down'));
@@ -714,5 +717,84 @@ describe('Worker regression coverage', () => {
 
     expect(response.status).toBe(200);
     expect(warnSpy).toHaveBeenCalledWith('Could not set Content-Length header:', expect.any(Error));
+  });
+
+  it('retries oversized range requests without edge caching', async () => {
+    const oversizedLength = String(512 * 1024 * 1024 + 1);
+    const oversizedHeaderValues = new Map([
+      ['content-type', 'application/octet-stream'],
+      ['content-length', oversizedLength]
+    ]);
+    const oversizedHeaders = {
+      /**
+       * Reads an upstream header value.
+       * @param {string} name
+       */
+      get(name) {
+        return oversizedHeaderValues.get(name.toLowerCase()) ?? null;
+      },
+      /**
+       * Checks whether an upstream header is present.
+       * @param {string} name
+       */
+      has(name) {
+        return oversizedHeaderValues.has(name.toLowerCase());
+      },
+      *[Symbol.iterator]() {
+        yield ['Content-Type', 'application/octet-stream'];
+      }
+    };
+    const oversizedResponse = /** @type {Response} */ ({
+      body: null,
+      headers: oversizedHeaders,
+      ok: true,
+      status: 200,
+      statusText: 'OK'
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(oversizedResponse)
+      .mockResolvedValueOnce(
+        new Response('slice', {
+          status: 206,
+          headers: { 'Content-Range': `bytes 0-4/${oversizedLength}` }
+        })
+      );
+
+    const response = await worker.fetch(
+      new Request('https://example.com/gh/user/repo/model.bin', {
+        headers: { Range: 'bytes=0-4' }
+      }),
+      {},
+      executionContext
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect('cf' in (fetchSpy.mock.calls[1][1] || {})).toBe(false);
+    expect(response.status).toBe(206);
+    expect(cacheDefault.put).toHaveBeenCalled();
+  });
+
+  it('skips edge caching for range requests on targets marked as oversized', async () => {
+    cacheDefault.match.mockImplementation(async request =>
+      request.url.includes('__xget/range-hint') ? new Response('1') : null
+    );
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('slice', {
+        status: 206,
+        headers: { 'Content-Range': 'bytes 0-4/10' }
+      })
+    );
+
+    const response = await worker.fetch(
+      new Request('https://example.com/gh/user/repo/model.bin', {
+        headers: { Range: 'bytes=0-4' }
+      }),
+      {},
+      executionContext
+    );
+
+    expect(response.status).toBe(206);
+    expect('cf' in (fetchSpy.mock.calls[0][1] || {})).toBe(false);
   });
 });
