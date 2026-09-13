@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import routesConfig from '../../site/_routes.json';
 import { PLATFORM_CATALOG } from '../../src/config/platform-catalog.js';
 import worker from '../../src/index.js';
 import {
@@ -48,6 +49,20 @@ describe('Restored URL converter page', () => {
     expect(body).toContain('src="i18n.js"');
     expect(body).toContain('src="script.js"');
     expect(body).toContain('href="Xget.ico"');
+  });
+
+  it('keeps the assets out of the Pages function routing', async () => {
+    const response = createUrlConverterResponse({ origin: 'https://xget.example' });
+    const body = await response.text();
+    const referenced = [...body.matchAll(/(?:href|src)="([^"/]+\.(?:css|js|png|ico))"/g)].map(
+      match => `/${match[1]}`
+    );
+
+    // The catch-all Pages function would otherwise answer asset requests with
+    // the converter page itself, so every referenced file has to be excluded.
+    expect(referenced.length).toBeGreaterThan(0);
+    expect(routesConfig.include).toContain('/*');
+    expect(routesConfig.exclude).toEqual(expect.arrayContaining([...new Set(referenced)]));
   });
 
   it('renders the platform list in the shape the page parses', () => {
