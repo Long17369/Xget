@@ -194,7 +194,7 @@ function renderHomePage({ input, notice, origin }) {
 <h1>Xget · URL 转换器</h1>
 <p class="sub">把受支持的上游地址转换成经 Xget 加速的地址。</p>
 ${noticeMarkup}
-<form method="get" action="/">
+<form method="get" action="">
   <input type="text" name="url" value="${escapeHtml(input ?? '')}" placeholder="https://github.com/torvalds/linux/archive/refs/heads/master.zip" autofocus>
   <button type="submit">转换</button>
 </form>

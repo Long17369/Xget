@@ -472,15 +472,13 @@ describe('Worker regression coverage', () => {
   it('logs and recovers when request setup throws unexpectedly', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     /**
-     * Fails while the homepage response is built so the top level handler runs.
-     * Every other header write is ignored, which is all this assertion needs.
-     * @param {string} name
-     * @returns {void}
+     * The restored converter page fills in the origin with `replaceAll`, so
+     * failing that call throws while the page is built. The error path itself
+     * does not use it, which is what lets the handler recover.
+     * @returns {string} Never returns.
      */
-    const setSpy = vi.spyOn(Headers.prototype, 'set').mockImplementation(name => {
-      if (String(name).toLowerCase() === 'cache-control') {
-        throw new Error('boom');
-      }
+    const replaceAllSpy = vi.spyOn(String.prototype, 'replaceAll').mockImplementation(() => {
+      throw new Error('boom');
     });
 
     const response = await worker.fetch(new Request('https://example.com/'), {}, executionContext);
@@ -488,7 +486,7 @@ describe('Worker regression coverage', () => {
     expect(response.status).toBe(500);
     expect(await response.text()).toBe('Internal Server Error');
     expect(errorSpy).toHaveBeenCalledWith('Error handling request:', expect.any(Error));
-    expect(setSpy).toHaveBeenCalled();
+    expect(replaceAllSpy).toHaveBeenCalled();
   });
 
   it('retries Docker requests with an anonymous token and follows redirects on success', async () => {

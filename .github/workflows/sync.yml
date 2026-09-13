@@ -44,6 +44,9 @@ jobs:
           cp package.json /tmp/pages-conversion/
           cp package-lock.json /tmp/pages-conversion/ 2>/dev/null || true
           cp LICENSE /tmp/pages-conversion/
+          # Static assets of the restored URL converter page. The page is
+          # served from the root document, so the assets have to sit next to it.
+          cp -r site/. /tmp/pages-conversion/
 
       - name: Rewrite Pages adapter imports for converted layout
         run: |

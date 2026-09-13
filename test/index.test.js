@@ -8,7 +8,7 @@ describe('Xget Core Functionality', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toContain('text/html');
-      expect(await response.text()).toContain('URL 转换器');
+      expect(await response.text()).toContain('Xget URL Converter');
     });
 
     it('should serve the URL converter for platform prefixes without a path', async () => {

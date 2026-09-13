@@ -84,13 +84,20 @@ export function resolveTarget(url, effectivePath, platforms) {
         ? '未识别该平台前缀，已回到转换器主页。'
         : `请在该前缀后补全资源路径，例如 /${barePrefixKey.replace(/-/g, '/')}/owner/repo。`;
 
-    return { response: createHomePageResponse({ notice, origin: url.origin }) };
+    return {
+      response: createHomePageResponse({
+        input: url.searchParams.get('url'),
+        notice,
+        origin: url.origin
+      })
+    };
   }
 
   const platformPath = `/${platform.replace(/-/g, '/')}`;
   if (effectivePath === platformPath || effectivePath === `${platformPath}/`) {
     return {
       response: createHomePageResponse({
+        input: url.searchParams.get('url'),
         notice: `请在该前缀后补全资源路径，例如 ${platformPath}/owner/repo。`,
         origin: url.origin
       })
