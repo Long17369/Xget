@@ -91,7 +91,11 @@ export function addSecurityHeaders(headers) {
   headers.set('X-Frame-Options', 'DENY');
   headers.set('X-XSS-Protection', '1; mode=block');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  headers.set('Content-Security-Policy', "default-src 'none'; img-src 'self'; script-src 'none'");
+  // Responses may ship a page specific policy (for example the converter
+  // homepage, which needs inline styles), so do not overwrite it.
+  if (!headers.has('Content-Security-Policy')) {
+    headers.set('Content-Security-Policy', "default-src 'none'; img-src 'self'; script-src 'none'");
+  }
   headers.set('Permissions-Policy', 'interest-cohort=()');
   return headers;
 }

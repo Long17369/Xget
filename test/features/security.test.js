@@ -228,17 +228,15 @@ describe('Security Features', () => {
         redirect: 'manual' // Don't follow redirects
       });
 
-      // Should return error or redirect
-      expect([400, 404, 302, 301]).toContain(response.status);
+      // Should return the converter page or an error response
+      expect([200, 400, 404, 302, 301]).toContain(response.status);
 
-      if (response.status >= 400) {
-        const body = await response.text();
-        // Should not expose internal paths, stack traces, or sensitive info
-        expect(body).not.toMatch(/\/[a-zA-Z]:[\\/]/); // Windows paths
-        expect(body).not.toMatch(/\/home\/[^/]+/); // Unix home paths
-        expect(body).not.toMatch(/at [a-zA-Z]+\.[a-zA-Z]+/); // Stack traces
-        expect(body).not.toMatch(/Error: .+ at/); // Detailed error messages
-      }
+      const body = await response.text();
+      // Should not expose internal paths, stack traces, or sensitive info
+      expect(body).not.toMatch(/\/[a-zA-Z]:[\\/]/); // Windows paths
+      expect(body).not.toMatch(/\/home\/[^/]+/); // Unix home paths
+      expect(body).not.toMatch(/at [a-zA-Z]+\.[a-zA-Z]+/); // Stack traces
+      expect(body).not.toMatch(/Error: .+ at/); // Detailed error messages
     });
 
     it('should provide generic error messages', async () => {

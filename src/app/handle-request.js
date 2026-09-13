@@ -10,11 +10,8 @@
 
 import { handleDockerAuth } from '../protocols/docker.js';
 import { finalizeResponse } from '../response/finalize-response.js';
-import {
-  createHomepageRedirect,
-  normalizeEffectivePath,
-  resolveTarget
-} from '../routing/resolve-target.js';
+import { createHomePageResponse } from '../response/home-page.js';
+import { normalizeEffectivePath, resolveTarget } from '../routing/resolve-target.js';
 import { getDefaultCache, tryReadCachedResponse } from '../upstream/cache.js';
 import { fetchUpstreamResponse } from '../upstream/fetch-upstream.js';
 import { PerformanceMonitor, addPerformanceHeaders } from '../utils/performance.js';
@@ -68,9 +65,12 @@ export async function handleRequest(request, env, ctx) {
       addSecurityHeaders(headers);
       response = new Response('{}', { status: 200, headers });
     }
-    // Redirect root path or invalid platforms to GitHub repository
+    // Render the URL converter for the root path
     else if (url.pathname === '/' || url.pathname === '') {
-      response = createHomepageRedirect();
+      response = createHomePageResponse({
+        input: url.searchParams.get('url'),
+        origin: url.origin
+      });
     } else {
       const validation = validateRequest(request, url, config, requestContext);
       if (!validation.valid) {

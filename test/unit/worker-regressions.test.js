@@ -147,7 +147,7 @@ describe('Worker regression coverage', () => {
     expect(await response.text()).toBe('{}');
   });
 
-  it('redirects unknown platforms and bare platform prefixes to the homepage', async () => {
+  it('renders the URL converter for unknown platforms and bare platform prefixes', async () => {
     const unknownPlatform = await worker.fetch(
       new Request('https://example.com/not-a-platform/resource'),
       {},
@@ -159,10 +159,13 @@ describe('Worker regression coverage', () => {
       executionContext
     );
 
-    expect(unknownPlatform.status).toBe(302);
-    expect(unknownPlatform.headers.get('Location')).toBe('https://github.com/xixu-me/Xget');
-    expect(barePlatform.status).toBe(302);
-    expect(barePlatform.headers.get('Location')).toBe('https://github.com/xixu-me/Xget');
+    expect(unknownPlatform.status).toBe(200);
+    expect(unknownPlatform.headers.get('Content-Type')).toContain('text/html');
+    expect(await unknownPlatform.text()).toContain('未识别该平台前缀');
+
+    expect(barePlatform.status).toBe(200);
+    expect(barePlatform.headers.get('Content-Type')).toContain('text/html');
+    expect(await barePlatform.text()).toContain('请在该前缀后补全资源路径');
   });
 
   it('rejects Docker requests that do not use a /cr/ prefix', async () => {
@@ -468,8 +471,16 @@ describe('Worker regression coverage', () => {
 
   it('logs and recovers when request setup throws unexpectedly', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const redirectSpy = vi.spyOn(Response, 'redirect').mockImplementation(() => {
-      throw new Error('boom');
+    /**
+     * Fails while the homepage response is built so the top level handler runs.
+     * Every other header write is ignored, which is all this assertion needs.
+     * @param {string} name
+     * @returns {void}
+     */
+    const setSpy = vi.spyOn(Headers.prototype, 'set').mockImplementation(name => {
+      if (String(name).toLowerCase() === 'cache-control') {
+        throw new Error('boom');
+      }
     });
 
     const response = await worker.fetch(new Request('https://example.com/'), {}, executionContext);
@@ -477,7 +488,7 @@ describe('Worker regression coverage', () => {
     expect(response.status).toBe(500);
     expect(await response.text()).toBe('Internal Server Error');
     expect(errorSpy).toHaveBeenCalledWith('Error handling request:', expect.any(Error));
-    expect(redirectSpy).toHaveBeenCalled();
+    expect(setSpy).toHaveBeenCalled();
   });
 
   it('retries Docker requests with an anonymous token and follows redirects on success', async () => {

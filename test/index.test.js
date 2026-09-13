@@ -3,33 +3,36 @@ import { describe, expect, it } from 'vitest';
 
 describe('Xget Core Functionality', () => {
   describe('Basic Request Handling', () => {
-    it('should redirect root path to homepage', async () => {
+    it('should serve the URL converter on the root path', async () => {
       const response = await SELF.fetch('https://example.com/', { redirect: 'manual' });
-      expect(response.status).toBe(302);
-      expect(response.headers.get('Location')).toBe('https://github.com/xixu-me/Xget');
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toContain('text/html');
+      expect(await response.text()).toContain('URL 转换器');
     });
 
-    it('should redirect platform prefix without path to homepage', async () => {
+    it('should serve the URL converter for platform prefixes without a path', async () => {
       // Test with /gh (no trailing slash)
       const response1 = await SELF.fetch('https://example.com/gh', { redirect: 'manual' });
-      expect(response1.status).toBe(302);
-      expect(response1.headers.get('Location')).toBe('https://github.com/xixu-me/Xget');
+      expect(response1.status).toBe(200);
+      expect(await response1.text()).toContain('请在该前缀后补全资源路径');
 
       // Test with /gh/ (with trailing slash)
       const response2 = await SELF.fetch('https://example.com/gh/', { redirect: 'manual' });
-      expect(response2.status).toBe(302);
-      expect(response2.headers.get('Location')).toBe('https://github.com/xixu-me/Xget');
+      expect(response2.status).toBe(200);
+      expect(await response2.text()).toContain('请在该前缀后补全资源路径');
 
       // Test with multi-part platform prefix (e.g., /ip/openai)
       const response3 = await SELF.fetch('https://example.com/ip/openai', { redirect: 'manual' });
-      expect(response3.status).toBe(302);
-      expect(response3.headers.get('Location')).toBe('https://github.com/xixu-me/Xget');
+      expect(response3.status).toBe(200);
+      expect(await response3.text()).toContain('请在该前缀后补全资源路径');
     });
 
-    it('should redirect invalid platform prefix to homepage', async () => {
+    it('should serve the URL converter for invalid platform prefixes', async () => {
       const response = await SELF.fetch('https://example.com/invalid/test', { redirect: 'manual' });
-      expect(response.status).toBe(302);
-      expect(response.headers.get('Location')).toBe('https://github.com/xixu-me/Xget');
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('未识别该平台前缀');
     });
 
     it('should include security headers in all responses', async () => {
