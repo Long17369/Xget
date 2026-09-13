@@ -27,6 +27,7 @@ import {
 import { configureGitHeaders } from '../protocols/git.js';
 import { configureHuggingFaceHeaders } from '../protocols/huggingface.js';
 import { createErrorResponse } from '../utils/security.js';
+import { readEdgeCacheHint, shouldRetryWithoutEdgeCache } from './range-cache-fallback.js';
 
 const MEDIA_FILE_PATTERN =
   /\.(mp4|avi|mkv|mov|wmv|flv|webm|mp3|wav|flac|aac|ogg|jpg|jpeg|png|gif|bmp|svg|pdf|zip|rar|7z|tar|gz|bz2|xz)$/i;
@@ -35,6 +36,7 @@ const MEDIA_FILE_PATTERN =
  * Creates upstream fetch options for the current request.
  * @param {{
  *   authorization: string | null,
+ *   bypassEdgeCache: boolean,
  *   canUseCache: boolean,
  *   config: import('../config/index.js').ApplicationConfig,
  *   request: Request,
@@ -53,6 +55,7 @@ const MEDIA_FILE_PATTERN =
  */
 function createFetchOptions({
   authorization,
+  bypassEdgeCache,
   canUseCache,
   config,
   request,
@@ -97,14 +100,17 @@ function createFetchOptions({
     return { fetchOptions, requestHeaders };
   }
 
-  Object.assign(fetchOptions, {
-    cf: {
-      http3: true,
-      cacheTtl: config.CACHE_DURATION,
-      cacheEverything: true,
-      preconnect: true
-    }
-  });
+  // Targets whose range semantics the edge cache breaks skip it entirely.
+  if (!bypassEdgeCache) {
+    Object.assign(fetchOptions, {
+      cf: {
+        http3: true,
+        cacheTtl: config.CACHE_DURATION,
+        cacheEverything: true,
+        preconnect: true
+      }
+    });
+  }
 
   requestHeaders.set('Accept-Encoding', 'gzip, deflate, br');
   requestHeaders.set('Connection', 'keep-alive');
@@ -307,8 +313,10 @@ async function retryDockerWithAnonymousToken({
  * Fetches an upstream resource with retries and protocol-specific handling.
  * @param {{
  *   authorization: string | null,
+ *   cache?: Cache | null,
  *   canUseCache: boolean,
  *   config: import('../config/index.js').ApplicationConfig,
+ *   ctx?: ExecutionContext,
  *   effectivePath: string,
  *   monitor: import('../utils/performance.js').PerformanceMonitor,
  *   platform: string,
@@ -328,8 +336,10 @@ async function retryDockerWithAnonymousToken({
  */
 export async function fetchUpstreamResponse({
   authorization,
+  cache = null,
   canUseCache,
   config,
+  ctx,
   effectivePath,
   monitor,
   platform,
@@ -340,8 +350,18 @@ export async function fetchUpstreamResponse({
 }) {
   let response;
   let responseGeneratedLocally = false;
+  const rangeHeader = request.headers.get('Range');
+
+  // Range requests for targets that the edge cache cannot serve as slices skip
+  // the edge cache entirely, otherwise their `206` semantics would be lost.
+  let bypassEdgeCache =
+    rangeHeader !== null &&
+    !shouldPassthroughRequest &&
+    (await readEdgeCacheHint({ cache, origin: requestContext.url.origin, targetUrl }));
+
   const { fetchOptions, requestHeaders } = createFetchOptions({
     authorization,
+    bypassEdgeCache,
     canUseCache,
     config,
     request,
@@ -369,6 +389,42 @@ export async function fetchUpstreamResponse({
         requestHeaders,
         targetUrl
       });
+
+      // The edge cache can collapse a range request into a full-object response.
+      // Retry without edge caching so the upstream 206 reaches the client.
+      if (request.method === 'GET' && !shouldPassthroughRequest && !bypassEdgeCache) {
+        const retryWithoutEdgeCache = await shouldRetryWithoutEdgeCache({
+          cache,
+          config,
+          ctx,
+          origin: requestContext.url.origin,
+          rangeHeader,
+          response,
+          targetUrl
+        });
+
+        if (retryWithoutEdgeCache) {
+          bypassEdgeCache = true;
+          const retryRequest = createFetchOptions({
+            authorization,
+            bypassEdgeCache,
+            canUseCache,
+            config,
+            request,
+            requestContext,
+            shouldPassthroughRequest,
+            targetUrl
+          });
+          retryRequest.fetchOptions.signal = controller.signal;
+          response = await executeFetch({
+            fetchOptions: retryRequest.fetchOptions,
+            request,
+            requestContext,
+            requestHeaders: retryRequest.requestHeaders,
+            targetUrl
+          });
+        }
+      }
 
       if (response.ok || response.status === 206) {
         monitor.mark('success');

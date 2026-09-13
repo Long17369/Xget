@@ -131,8 +131,10 @@ export async function handleRequest(request, env, ctx) {
                   responseGeneratedLocally: upstreamResponseGeneratedLocally
                 } = await fetchUpstreamResponse({
                   authorization,
+                  cache,
                   canUseCache,
                   config,
+                  ctx,
                   effectivePath,
                   monitor,
                   platform,
