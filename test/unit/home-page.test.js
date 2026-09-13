@@ -106,9 +106,11 @@ describe('Homepage URL converter', () => {
     expect(policy).not.toContain("script-src 'unsafe-inline'");
   });
 
-  it('serves the converter on the root path and keeps the page policy through the worker', async () => {
+  it('keeps the notice page working through the worker', async () => {
     const response = await worker.fetch(
-      new Request('https://example.com/?url=https%3A%2F%2Fgithub.com%2Ftorvalds%2Flinux'),
+      new Request(
+        'https://example.com/not-a-platform/x?url=https%3A%2F%2Fgithub.com%2Ftorvalds%2Flinux'
+      ),
       {},
       executionContext
     );
@@ -117,6 +119,7 @@ describe('Homepage URL converter', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(response.headers.get('Content-Security-Policy')).toContain("style-src 'unsafe-inline'");
+    expect(body).toContain('未识别该平台前缀');
     expect(body).toContain('https://example.com/gh/torvalds/linux');
   });
 });

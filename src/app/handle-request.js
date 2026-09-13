@@ -10,7 +10,8 @@
 
 import { handleDockerAuth } from '../protocols/docker.js';
 import { finalizeResponse } from '../response/finalize-response.js';
-import { createHomePageResponse } from '../response/home-page.js';
+import { createPlatformSourceResponse } from '../response/platform-source.js';
+import { createUrlConverterResponse } from '../response/url-converter-page.js';
 import { normalizeEffectivePath, resolveTarget } from '../routing/resolve-target.js';
 import { getDefaultCache, tryReadCachedResponse } from '../upstream/cache.js';
 import { fetchUpstreamResponse } from '../upstream/fetch-upstream.js';
@@ -18,6 +19,21 @@ import { PerformanceMonitor, addPerformanceHeaders } from '../utils/performance.
 import { addCorsHeaders, addSecurityHeaders, createErrorResponse } from '../utils/security.js';
 import { getAllowedMethods, isProtocolRequest, validateRequest } from '../utils/validation.js';
 import { createRequestContext } from './request-context.js';
+
+/**
+ * Paths serving the restored URL converter page.
+ *
+ * The original site shipped the converter plus per-locale copies. Only the
+ * root document was archived, so every locale path serves that document and
+ * the bundled `i18n.js` picks the language up from the path.
+ */
+const RESTORED_CONVERTER_PATHS = new Set([
+  '/',
+  '/index.html',
+  '/zh-hans.html',
+  '/zh-hant.html',
+  '/404.html'
+]);
 
 /**
  * Main request handler with comprehensive caching, retry logic, and security measures.
@@ -65,12 +81,13 @@ export async function handleRequest(request, env, ctx) {
       addSecurityHeaders(headers);
       response = new Response('{}', { status: 200, headers });
     }
-    // Render the URL converter for the root path
-    else if (url.pathname === '/' || url.pathname === '') {
-      response = createHomePageResponse({
-        input: url.searchParams.get('url'),
-        origin: url.origin
-      });
+    // Restored URL converter page (the former xuc.xi-xu.me)
+    else if (RESTORED_CONVERTER_PATHS.has(url.pathname)) {
+      response = createUrlConverterResponse({ origin: url.origin });
+    }
+    // Platform list consumed by the restored page's script.js
+    else if (url.pathname === '/platforms.js') {
+      response = createPlatformSourceResponse();
     } else {
       const validation = validateRequest(request, url, config, requestContext);
       if (!validation.valid) {
